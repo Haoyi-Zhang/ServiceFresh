@@ -1,0 +1,12 @@
+{
+  "cases": 1,
+  "checks": 68,
+  "contexts": 16,
+  "cpu_seconds": 0.230970527,
+  "peak_rss_kib": 106796,
+  "phase": "scale-01",
+  "status": "passed",
+  "timed_query_calls": 2560,
+  "wall_seconds": 0.231154565,
+  "worker_count": 1
+}

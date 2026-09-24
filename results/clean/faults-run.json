@@ -1,0 +1,17 @@
+{
+  "cache_guard_faults": 4,
+  "cases": 25,
+  "certificate_mutations": 20,
+  "checks": 1572,
+  "cpu_seconds": 0.01018527,
+  "intake_contexts": 216,
+  "invalid_stream_rejections": 36,
+  "invalid_streams": 18,
+  "peak_rss_kib": 95784,
+  "phase": "faults",
+  "status": "passed",
+  "valid_control_contexts": 1296,
+  "valid_controls": 6,
+  "wall_seconds": 0.012947361,
+  "worker_count": 1
+}
