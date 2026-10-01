@@ -37,6 +37,8 @@ class Summary:
 class Verified:
     cut: str
     q0: int
+    entity: str
+    attribute: str
     tokens: frozenset
     entries: tuple[Summary, ...]
 
@@ -229,14 +231,22 @@ class Prefix:
                     winner, rank = key, current
         return (winner, tuple(eligible)) if details else winner
 
-def check(prefix: Prefix, cert) -> Verified:
-    """Check one bootstrap certificate. The prefix is already independently read."""
+def check(prefix: Prefix, cert, *, expected_entity, expected_attribute) -> Verified:
+    """Check one bootstrap certificate for a caller-selected target.
+
+    ``expected_entity`` and ``expected_attribute`` are trusted request inputs; the
+    certificate may repeat them but may not select or redirect the query target.
+    """
     try:
+        insist(text(expected_entity) and expected_entity in prefix.policy['entities'], 'expected.entity')
+        insist(text(expected_attribute) and expected_attribute in prefix.policy['attributes'], 'expected.attribute')
         insist(type(cert) is dict and set(cert) == {'cut', 'q0', 'query', 'frontier', 'covered', 'inactive'}, 'certificate.fields')
         insist(type(cert['cut']) is str and cert['cut'] == prefix.cut and type(cert['q0']) is int and cert['q0'] == prefix.q0, 'certificate.cut')
         q = cert['query']
         insist(type(q) is dict and set(q) == {'entity', 'attribute'}, 'certificate.query')
-        active, inactive = prefix.summaries(q['entity'], q['attribute'])
+        insist(q['entity'] == expected_entity and q['attribute'] == expected_attribute,
+               'certificate.query_target')
+        active, inactive = prefix.summaries(expected_entity, expected_attribute)
         kept, partition = {}, set()
         insist(type(cert['frontier']) is list and type(cert['covered']) is list and type(cert['inactive']) is list, 'certificate.lists')
         for row in cert['frontier']:
@@ -267,9 +277,10 @@ def check(prefix: Prefix, cert) -> Verified:
             insist(text(key) and key in inactive and key not in seen_inactive and row['reason'] == inactive[key], 'inactive.reason')
             seen_inactive.add(key)
         insist(seen_inactive == set(inactive), 'inactive.omitted_candidate')
-        return Verified(prefix.cut, prefix.q0, prefix.tokens, tuple(kept.values()))
+        return Verified(prefix.cut, prefix.q0, expected_entity, expected_attribute, prefix.tokens, tuple(kept.values()))
     except (KeyError, TypeError, AttributeError, IndexError) as exc:
         raise AuditError('certificate: malformed field type or missing field') from exc
 
-def verify(raw, cert):
-    return check(Prefix(raw), cert)
+def verify(raw, cert, *, expected_entity, expected_attribute):
+    return check(Prefix(raw), cert, expected_entity=expected_entity,
+                 expected_attribute=expected_attribute)

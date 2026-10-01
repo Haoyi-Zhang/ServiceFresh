@@ -7,7 +7,7 @@ frontier and budgeted-winner implementations as ordinary candidates.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from itertools import combinations
+from itertools import combinations, product
 from math import ceil, comb, log2
 
 from .frontier import Candidate
@@ -97,6 +97,97 @@ def tight_budget_grid(
                 identity = f"budget-d{deadline}-r{revoked:06d}"
                 rank = (-deadline, support.bit_count(), identity)
                 items.append(Candidate(identity, rank, deadline, support))
+    return tuple(items)
+
+
+def _selected_deadline_labels(deadlines: Sequence[int], labels: Sequence[int], count: int):
+    """Select ``min(count, capacity)`` pairs while preserving every deadline."""
+    if type(count) is not int or count < 0:
+        raise ValueError("count must be a nonnegative integer")
+    if count == 0:
+        if deadlines:
+            raise ValueError("zero candidates require zero deadlines")
+        return (), 0
+    if not deadlines:
+        raise ValueError("nonempty candidates require deadlines")
+    if any(type(value) is not int for value in deadlines):
+        raise ValueError("deadlines must contain integers")
+    if len(set(deadlines)) != len(deadlines):
+        raise ValueError("deadlines must be distinct")
+    if count < len(deadlines):
+        raise ValueError("actual deadline count cannot exceed candidate count")
+    pairs = [(deadline, labels[0]) for deadline in sorted(deadlines)]
+    limit = min(count, len(deadlines) * len(labels))
+    present = set(pairs)
+    for pair in product(sorted(deadlines), labels):
+        if len(pairs) == limit:
+            break
+        if pair not in present:
+            pairs.append(pair)
+            present.add(pair)
+    return tuple(pairs), count - limit
+
+
+def tight_summary_instance(
+    candidate_count: int, deadlines: Sequence[int], token_count: int
+) -> tuple[Candidate, ...]:
+    """Attain ``min(M, D*2**u)`` with exactly ``M`` candidates and ``D`` deadlines.
+
+    The nonempty legal domain is ``1 <= D <= M``.  Selected distinct summaries
+    cover every supplied deadline.  When ``M`` exceeds summary capacity, lower-
+    ranked copies of one selected summary fill the instance without adding a
+    frontier member.  The empty legal instance has ``M = D = 0``.
+    """
+    if type(token_count) is not int or token_count < 0:
+        raise ValueError("token_count must be a nonnegative integer")
+    if token_count > 20:
+        raise ValueError("token_count is limited to 20 for bounded fixtures")
+    supports = tuple(range(1 << token_count))
+    pairs, duplicate_count = _selected_deadline_labels(deadlines, supports, candidate_count)
+    if not pairs:
+        return ()
+    items: list[Candidate] = []
+    for index, (deadline, support) in enumerate(pairs):
+        identity = f"summary-{index:06d}-d{deadline}-s{support:06d}"
+        rank = (-deadline, support.bit_count(), identity)
+        items.append(Candidate(identity, rank, deadline, support))
+    base_rank = min(item.rank[0] for item in items) - 1
+    template = items[0]
+    for index in range(duplicate_count):
+        identity = f"summary-copy-{index:06d}"
+        items.append(Candidate(identity, (base_rank-index, -1, identity),
+                               template.deadline, template.support))
+    return tuple(items)
+
+
+def tight_budget_instance(
+    candidate_count: int, deadlines: Sequence[int], token_count: int, budget: int
+) -> tuple[Candidate, ...]:
+    """Attain ``min(M, D*N_b(u))`` with exactly ``M`` candidates and ``D`` deadlines."""
+    if type(token_count) is not int or token_count < 0:
+        raise ValueError("token_count must be a nonnegative integer")
+    if type(budget) is not int or budget < 0:
+        raise ValueError("budget must be a nonnegative integer")
+    if token_count > 20:
+        raise ValueError("token_count is limited to 20 for bounded fixtures")
+    labels = tuple(mask for mask in range(1 << token_count)
+                   if mask.bit_count() <= min(budget, token_count))
+    pairs, duplicate_count = _selected_deadline_labels(deadlines, labels, candidate_count)
+    if not pairs:
+        return ()
+    full_support = (1 << token_count) - 1
+    items: list[Candidate] = []
+    for index, (deadline, revoked) in enumerate(pairs):
+        support = full_support & ~revoked
+        identity = f"budget-{index:06d}-d{deadline}-r{revoked:06d}"
+        rank = (-deadline, support.bit_count(), identity)
+        items.append(Candidate(identity, rank, deadline, support))
+    base_rank = min(item.rank[0] for item in items) - 1
+    template = items[0]
+    for index in range(duplicate_count):
+        identity = f"budget-copy-{index:06d}"
+        items.append(Candidate(identity, (base_rank-index, -1, identity),
+                               template.deadline, template.support))
     return tuple(items)
 
 def expiry_ladder(count: int, *, first_deadline: int = 1) -> tuple[Candidate, ...]:

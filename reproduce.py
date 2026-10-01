@@ -9,12 +9,14 @@ import argparse
 import csv
 import json
 import os
+import platform
 from pathlib import Path
 import resource
 import statistics
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from copy import deepcopy
 from itertools import product
 from freshcert import cases
@@ -35,10 +37,57 @@ class Counter:
             raise RuntimeError('per-phase obligation cap exceeded')
 
 def bounded():
-    if hasattr(os, 'sched_getaffinity'):
-        os.sched_setaffinity(0, {min(os.sched_getaffinity(0))})
+    affinity = {'supported': hasattr(os, 'sched_getaffinity'),
+                'before': None, 'selected': None, 'after': None}
+    if affinity['supported']:
+        before = sorted(os.sched_getaffinity(0))
+        selected = min(before)
+        os.sched_setaffinity(0, {selected})
+        affinity.update(before=before, selected=selected,
+                        after=sorted(os.sched_getaffinity(0)))
     resource.setrlimit(resource.RLIMIT_AS, (2_500_000_000, 2_500_000_000))
     resource.setrlimit(resource.RLIMIT_CPU, (100, 100))
+    return affinity
+
+def runtime_environment(affinity):
+    os_release = {}
+    release_path = Path('/etc/os-release')
+    if release_path.exists():
+        for line in release_path.read_text(errors='replace').splitlines():
+            if '=' in line:
+                key, value = line.split('=', 1)
+                os_release[key] = value.strip().strip('\"')
+    cpu_model = None
+    cpuinfo = Path('/proc/cpuinfo')
+    if cpuinfo.exists():
+        for line in cpuinfo.read_text(errors='replace').splitlines():
+            if ':' in line and line.split(':', 1)[0].strip() in {'model name', 'Processor', 'Hardware'}:
+                cpu_model = line.split(':', 1)[1].strip()
+                if cpu_model:
+                    break
+    return {
+        'recorded_at_utc': datetime.now(timezone.utc).isoformat(),
+        'python': {
+            'implementation': platform.python_implementation(),
+            'version': platform.python_version(),
+            'full_version': sys.version.replace('\n', ' '),
+            'executable': sys.executable,
+        },
+        'cpu': {
+            'architecture': platform.machine(),
+            'model': cpu_model or 'not exposed to process',
+            'logical_count_visible_before_affinity': (len(affinity['before'])
+                                                       if affinity['before'] is not None else None),
+        },
+        'os': {
+            'system': platform.system(),
+            'release': platform.release(),
+            'version': platform.version(),
+            'distribution': os_release.get('PRETTY_NAME', 'not recorded'),
+            'execution_image': 'not exposed to process',
+        },
+        'affinity': affinity,
+    }
 
 def dump(path, value):
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + '\n')
@@ -153,7 +202,7 @@ def trace_batch(out, counter, batch):
             entity, attr = spec['entity'], spec['attribute']
             started = time.perf_counter_ns(); cert = c.certificate(entity, attr)
             build_us = (time.perf_counter_ns()-started)/1000
-            started = time.perf_counter_ns(); verified = check(p, cert)
+            started = time.perf_counter_ns(); verified = check(p, cert, expected_entity=entity, expected_attribute=attr)
             check_us = (time.perf_counter_ns()-started)/1000
             all_compiled, _ = c.summaries(entity, attr)
             counter.test(reversed_c.certificate(entity, attr) == cert, case['id'] + ': event permutation')
@@ -194,11 +243,11 @@ def scaling(out, counter, index):
     entity, attr = spec['entity'], spec['attribute']
     start = time.perf_counter_ns(); c = Compiled(raw); cert = c.certificate(entity, attr)
     producer_us = (time.perf_counter_ns()-start)/1000
-    start = time.perf_counter_ns(); p = Prefix(raw); verified = check(p, cert)
+    start = time.perf_counter_ns(); p = Prefix(raw); verified = check(p, cert, expected_entity=entity, expected_attribute=attr)
     checker_us = (time.perf_counter_ns()-start)/1000
     start = time.perf_counter_ns(); full_prefix = Prefix(raw)
     full_summaries, _ = full_prefix.summaries(entity, attr)
-    full_sets = Verified(full_prefix.cut, full_prefix.q0, full_prefix.tokens, tuple(full_summaries.values()))
+    full_sets = Verified(full_prefix.cut, full_prefix.q0, entity, attr, full_prefix.tokens, tuple(full_summaries.values()))
     full_set_setup_us = (time.perf_counter_ns()-start)/1000
     all_compiled, _ = c.summaries(entity, attr)
     contexts = [(x['q'], x['revoked'], c.mask(x['revoked'])|c.known) for x in spec['contexts']]
@@ -238,7 +287,7 @@ def scaling(out, counter, index):
 
 def faults(out, counter):
     records = []; intake = json.loads((ROOT/'inputs/intake.json').read_text())
-    c = Compiled(intake); cert = c.certificate('e0','tag'); p = Prefix(intake); verified = check(p,cert)
+    c = Compiled(intake); cert = c.certificate('e0','tag'); p = Prefix(intake); verified = check(p, cert, expected_entity='e0', expected_attribute='tag')
     for q, mask in product(range(5,32), range(8)):
         revoked = [x for i,x in enumerate(('a','b','link')) if mask>>i&1]
         counter.test(p.direct('e0','tag',q,revoked) == verified.query(q,revoked,current_cut=intake['cut']), 'retained intake query')
@@ -251,14 +300,14 @@ def faults(out, counter):
             records.append({'case':case['id'], 'kind':'invalid-stream', 'fault':case['fault'], 'method':method, 'rejected':int(rejected), 'reason':reason})
     for case in rows('valid-controls.jsonl'):
         raw = case['stream']; producer = Compiled(raw); independent = Prefix(raw)
-        accepted = check(independent, producer.certificate('e0','tag'))
+        accepted = check(independent, producer.certificate('e0','tag'), expected_entity='e0', expected_attribute='tag')
         for q, mask in product(range(5,32), range(8)):
             revoked = [x for i,x in enumerate(('a','b','link')) if mask>>i&1]
             counter.test(independent.direct('e0','tag',q,revoked) == accepted.query(q,revoked,current_cut=raw['cut']), case['id'] + ': valid control')
         records.append({'case':case['id'], 'kind':'valid-control', 'fault':case['control'], 'method':'both', 'rejected':0, 'reason':'accepted and replay-equivalent'})
     mutations = []
     for i,(label,bad) in enumerate(cases.certificate_faults(cert)):
-        try: check(p,bad)
+        try: check(p, bad, expected_entity='e0', expected_attribute='tag')
         except AuditError as exc: rejected, reason = True, str(exc)
         else: rejected, reason = False, 'accepted'
         counter.test(rejected, 'certificate fault:' + label)
@@ -281,14 +330,16 @@ def phase_name(phase, index):
     return f'{phase}-{index:02d}' if phase in {'traces','scale'} else phase
 
 def run_phase(phase, index, out):
-    bounded(); counter = Counter(); cpu = time.process_time_ns(); wall = time.perf_counter_ns()
+    affinity = bounded(); environment = runtime_environment(affinity)
+    counter = Counter(); cpu = time.process_time_ns(); wall = time.perf_counter_ns()
     functions = {'inputs':lambda:cases.generate(ROOT), 'tiny':lambda:tiny(out,counter),
                  'traces':lambda:trace_batch(out,counter,index), 'scale':lambda:scaling(out,counter,index),
                  'faults':lambda:faults(out,counter)}
     result = functions[phase]()
     result.update({'phase':phase_name(phase,index), 'checks':counter.checks, 'cpu_seconds':(time.process_time_ns()-cpu)/1e9,
                    'wall_seconds':(time.perf_counter_ns()-wall)/1e9,
-                   'peak_rss_kib':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,'worker_count':1,'status':'passed'})
+                   'peak_rss_kib':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,'worker_count':1,
+                   'environment':environment,'status':'passed'})
     dump(out/(phase_name(phase,index)+'-run.json'),result)
     print(json.dumps(result,sort_keys=True),flush=True)
 
@@ -307,8 +358,25 @@ def summary(out):
                'invalid_streams_rejected_by_each':18,'valid_controls_accepted':6,'certificate_faults_rejected':20,'cache_guard_faults_rejected':4}
     dump(out/'semantic-summary.json',semantics)
     runtime={'runs':len(runs),'cpu_seconds':sum(x['cpu_seconds'] for x in runs),'wall_seconds':sum(x['wall_seconds'] for x in runs),
-             'peak_rss_kib':max(x['peak_rss_kib'] for x in runs),'checks':checks,'workers':1,'phase_limits':{'cpu_seconds':100,'wall_seconds':120,'address_space_bytes':2500000000}}
+             'peak_rss_kib':max(x['peak_rss_kib'] for x in runs),'checks':checks,'workers':1,'phase_limits':{'cpu_seconds':100,'wall_seconds':120,'address_space_bytes':2500000000},
+             'environment_file':'environment.json'}
     dump(out/'runtime-summary.json',runtime)
+    phase_environments=[x.get('environment') for x in runs]
+    if not all(phase_environments):
+        raise RuntimeError('phase environment metadata missing')
+    stable_keys=('python','cpu','os')
+    baseline={key:phase_environments[0][key] for key in stable_keys}
+    if any(any(env[key] != baseline[key] for key in stable_keys) for env in phase_environments[1:]):
+        raise RuntimeError('phase environment metadata changed within one run')
+    affinity_records=[env['affinity'] for env in phase_environments]
+    if any(a.get('supported') and a.get('after') != [a.get('selected')] for a in affinity_records):
+        raise RuntimeError('one-core affinity was not established')
+    environment={**baseline, 'affinity_policy':'one logical CPU per phase, selected as the minimum CPU in the inherited allowed mask',
+                 'phase_affinity':affinity_records, 'phase_count':len(runs),
+                 'first_recorded_at_utc':phase_environments[0]['recorded_at_utc'],
+                 'last_recorded_at_utc':phase_environments[-1]['recorded_at_utc'],
+                 'scope':'this execution only; not evidence for a different retained run'}
+    dump(out/'environment.json',environment)
     scale_rows=[]
     for i in range(12):
         row=json.loads((out/f'scale-{i:02d}-case.json').read_text())

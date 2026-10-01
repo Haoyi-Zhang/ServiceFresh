@@ -9,7 +9,9 @@ from freshcert.extremal import (
     summary_pairs,
     support_code,
     tight_budget_grid,
+    tight_budget_instance,
     tight_summary_grid,
+    tight_summary_instance,
 )
 from freshcert.frontier import Candidate, budget_frontier, budget_witness, frontier, query
 
@@ -30,6 +32,12 @@ class SummaryDiversityTests(unittest.TestCase):
         self.assertEqual(len(items), 3 * 2**3)
         self.assertEqual(len(summary_pairs(items)), len(items))
         self.assertEqual(len(frontier(items)), len(items))
+        for count in (3, 4, 7, 24, 27):
+            partial = tight_summary_instance(count, (7, 11, 19), 3)
+            self.assertEqual(len(partial), count)
+            self.assertEqual({item.deadline for item in partial}, {7, 11, 19})
+            self.assertEqual(len(frontier(partial)), min(count, 3 * 2**3))
+        self.assertEqual(tight_summary_instance(0, (), 3), ())
 
     def test_expiry_alone_can_prevent_compression(self) -> None:
         items = expiry_ladder(128, first_deadline=100)
@@ -74,6 +82,14 @@ class SummaryDiversityTests(unittest.TestCase):
             tight_budget_grid((1,), -1, 1)
         with self.assertRaises(ValueError):
             tight_budget_grid((1,), 1, -1)
+        with self.assertRaises(ValueError):
+            tight_summary_instance(1, (1, 2), 0)
+        with self.assertRaises(ValueError):
+            tight_summary_instance(0, (1,), 0)
+        with self.assertRaises(ValueError):
+            tight_budget_instance(1, (1, 2), 0, 0)
+        with self.assertRaises(ValueError):
+            tight_budget_instance(0, (1,), 0, 0)
 
 
 class BudgetContextBoundTests(unittest.TestCase):
@@ -107,6 +123,13 @@ class BudgetContextBoundTests(unittest.TestCase):
                             budget_context_bound(deadline_count, token_count, budget),
                         )
                         self.assertEqual(len(budget_frontier(items, budget)), len(items))
+                        capacity = budget_context_bound(deadline_count, token_count, budget)
+                        for count in (deadline_count, capacity, capacity + 2):
+                            exact = tight_budget_instance(count, deadlines, token_count, budget)
+                            self.assertEqual(len(exact), count)
+                            self.assertEqual({item.deadline for item in exact}, set(deadlines))
+                            self.assertEqual(len(budget_frontier(exact, budget)),
+                                             min(count, capacity))
 
     def test_tight_budget_grid_wins_under_direct_context_enumeration(self) -> None:
         for deadline_count in (1, 2):

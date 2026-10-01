@@ -39,7 +39,7 @@ S(v) = union { scope(u) : u in C(v) }.
 
 A support is a set of revocation tokens, not a probability or multiplicity.
 
-**Lemma 1 (ancestral liveness).** Under the admitted AND semantics, `v` is live at query time `q` after revoked set `R` exactly when `q < d(v)` and `S(v)` is disjoint from `R`.
+**Lemma 2 (ancestral liveness).** Under the admitted AND semantics, `v` is live at query time `q` after revoked set `R` exactly when `q < d(v)` and `S(v)` is disjoint from `R`.
 
 **Proof.** Take a topological order of the parent DAG. A leaf satisfies its local deadline and scope predicates. A derived node conjoins its local predicate with every parent predicate already characterized by the induction hypothesis. Conjoining strict upper bounds takes their minimum, and requiring all support sets to avoid `R` takes their union. Repeated ancestors are idempotent under both operations. Therefore the recurrence is exact. In particular, copying or recomputing a value cannot reset an ancestor's expiry or remove an ancestor's revocation obligation. QED.
 
@@ -53,9 +53,9 @@ T_j(rank,d,S) = (rank, min(d,d_j), S union S_j).
 
 Base ownership and rank are unchanged.
 
-**Lemma 2 (anchor equivalence).** In a forest cut, the transferred candidate is live exactly when its direct evidence is live and its base entity is connected to the anchor in the live alias forest.
+**Lemma 3 (anchor equivalence).** In a forest cut, the transferred candidate is live exactly when its direct evidence is live and its base entity is connected to the anchor in the live alias forest.
 
-**Proof.** A forest has at most one route between two vertices. The endpoints are connected in the live subgraph exactly when every attestation on that route is live. Apply Lemma 1 to the candidate and every route attestation, then conjoin their predicates. Minimum deadlines and unioned supports give the transferred summary. With no route, visibility is impossible; with `r=e`, the empty route adds no obligation. QED.
+**Proof.** A forest has at most one route between two vertices. The endpoints are connected in the live subgraph exactly when every attestation on that route is live. Apply Lemma 2 to the candidate and every route attestation, then conjoin their predicates. Minimum deadlines and unioned supports give the transferred summary. With no route, visibility is impossible; with `r=e`, the empty route adds no obligation. QED.
 
 Initially disconnected candidates, candidates with `d <= q0`, and candidates whose supports intersect the already known revoked set are permanently inactive under a fixed cut and monotone revocation. Remove them before retention. Let `A` be the remaining finite candidate set; every `x in A` has distinct rank, deadline `d_x > q0`, and support `S_x subseteq U`.
 
@@ -72,11 +72,11 @@ y dominates x  iff
 
 Let `F(A)` contain exactly the undominated candidates. A query `(q,R)` is allowed when `q >= q0` and `R subseteq U`; revocation is monotone because only the cumulative set matters.
 
-**Theorem 3 (winner preservation).** For every allowed query, the maximum live identity in `F(A)` equals the maximum live identity in `A`, including absence.
+**Theorem 4 (winner preservation).** For every allowed query, the maximum live identity in `F(A)` equals the maximum live identity in `A`, including absence.
 
 **Proof.** If `y` dominates `x` and `x` is live, then `q < d_x <= d_y`, and `R` avoiding `S_x` implies that it avoids `S_y`. Hence `y` is also live and outranks `x`; a dominated candidate cannot win. Strictly increasing ranks make every dominance chain finite, so each removed live candidate has a retained live dominator. Therefore the maximum is unchanged. QED.
 
-**Theorem 4 (constructive necessity and unique minimum sublist).** Every `x in F(A)` is the unique winner at
+**Theorem 5 (constructive necessity and unique minimum sublist).** Every `x in F(A)` is the unique winner at
 
 ```
 q_x = d_x - 1,
@@ -85,27 +85,27 @@ R_x = U \ S_x.
 
 Consequently `F(A)` is the unique inclusion-minimum and cardinality-minimum exact sublist of the original candidates.
 
-**Proof.** Integer deadlines and `d_x > q0` give `q_x >= q0`, and `x` is live. Consider a higher-ranked `y`. If `d_y < d_x`, integer time gives `d_y <= q_x`, so `y` has expired. Otherwise `d_y >= d_x`; because `x` is undominated, `S_y` is not a subset of `S_x`, so `S_y` contains a token in `U \ S_x = R_x` and is revoked. Lower-ranked candidates cannot beat `x`. Thus every exact original-candidate sublist must retain `x`; Theorem 3 shows that retaining all and only frontier members suffices. QED.
+**Proof.** Integer deadlines and `d_x > q0` give `q_x >= q0`, and `x` is live. Consider a higher-ranked `y`. If `d_y < d_x`, integer time gives `d_y <= q_x`, so `y` has expired. Otherwise `d_y >= d_x`; because `x` is undominated, `S_y` is not a subset of `S_x`, so `S_y` contains a token in `U \ S_x = R_x` and is revoked. Lower-ranked candidates cannot beat `x`. Thus every exact original-candidate sublist must retain `x`; Theorem 4 shows that retaining all and only frontier members suffices. QED.
 
 This is a representation theorem. It does not minimize bits, circuits, value-only summaries, graph reachability structures, or encodings that can reconstruct candidates.
 
 ## 5. Exact unrestricted cardinality and no-compression thresholds
 
-Let `M = |A|`, let `D` be the number of distinct candidate deadlines, and let `u = |U|`.
+Let `M = |A|`, let `D` be the number of distinct candidate deadlines actually present, and let `u = |U|`. The empty instance has `M=D=0`; every nonempty instance necessarily satisfies `1 <= D <= M`.
 
-**Theorem 5 (tight unrestricted size).**
+**Theorem 6 (tight unrestricted size).**
 
 ```
 |F(A)| <= min(M, D * 2^u),
 ```
 
-and equality is attainable for every admissible `D,u,M` with `M <= D*2^u`.
+and equality is attainable for every `u >= 0` and every legal `(M,D)`: either `M=D=0`, or `1 <= D <= M`.
 
 **Proof of the upper bound.** There are only `D*2^u` distinct `(deadline,support)` summaries. With distinct ranks, two candidates sharing one summary are comparable and the higher-ranked one dominates the other. At most one frontier member occupies each summary. The candidate count `M` is the other cap. QED.
 
-**Matching construction.** Choose the desired distinct deadline/support pairs and create one candidate per pair. Rank by the tuple `(-deadline, |support|, identifier)`. Whenever one summary lasts at least as long and uses a subset of another support, it receives a lower rank unless the summaries are identical. It therefore cannot dominate the other candidate. All selected candidates are undominated. The artifact function `tight_summary_grid` realizes the full grid; selecting any `M` pairs realizes the capped value.
+**Matching construction.** The empty case is immediate. Otherwise let `L=min(M,D*2^u)`. Select `L` distinct deadline/support pairs while covering every one of the `D` deadlines; this is possible because `D <= L <= D*2^u`. Rank one candidate per selected pair by `(-deadline, |support|, identifier)`. Whenever one summary lasts at least as long and uses a subset of another support, it receives a lower rank unless the summaries coincide, so all selected candidates are undominated. If `M>L`, add `M-L` lower-ranked copies of one selected summary; its selected original dominates every copy, no new winner appears, and the actual deadline count remains `D`. `tight_summary_grid` realizes the full grid and `tight_summary_instance` realizes every legal capped case.
 
-Two exact corollaries expose different no-compression mechanisms.
+**Corollary 7 (no-compression thresholds).** Two exact cases expose different no-compression mechanisms.
 
 1. **Expiry alone.** With `u=0`, the exact worst case is `min(M,D)`. Rank earlier-expiring candidates higher; time successively exposes every candidate. The artifact's `expiry_ladder` supplies this witness.
 2. **One deadline.** With `D=1`, the exact worst case is `min(M,2^u)`. Retaining all `M` candidates is possible if and only if `u >= ceil(log2 M)`. Distinct bit-mask supports, ranked so strict subsets have lower rank, attain the threshold. The artifact's `support_code` supplies this witness.
@@ -116,7 +116,7 @@ Private per-record scopes are therefore sufficient but not necessary for noncomp
 
 For compatible candidate sets using the same policy and rank semantics, let `L_(q,R)` filter to live candidates. Let a common alias transfer be `T(rank,d,S)=(rank,min(d,D0),S union C)`.
 
-**Theorem 6 (composition).**
+**Theorem 8 (composition).**
 
 ```
 F(F(A) union F(B)) = F(A union B)
@@ -141,7 +141,7 @@ D_x = { S_y \ S_x : y in H_x }.
 
 A family containing an empty set cannot be hit; the empty family needs no hits.
 
-**Theorem 7 (budgeted possible-winner criterion).** Candidate `x` can win after at most `b` additional revocations if and only if `D_x` has a hitting set of size at most `b`. A witness can be chosen disjoint from `S_x` and used at time `d_x-1`.
+**Theorem 9 (budgeted possible-winner criterion).** Candidate `x` can win after at most `b` additional revocations if and only if `D_x` has a hitting set of size at most `b`. A witness can be chosen disjoint from `S_x` and used at time `d_x-1`.
 
 **Proof.** If `x` wins, every higher-ranked candidate that remains unexpired at `d_x-1` must be disabled by a revoked token outside `S_x`; those tokens form a hitting set for `D_x`. Conversely, a hitting set outside `S_x` disables every member of `H_x` at `d_x-1`, while all higher-ranked candidates with earlier deadlines have expired. Then `x` is live and wins. QED.
 
@@ -155,23 +155,23 @@ Define
 N_b(u) = sum_{k=0}^{min(b,u)} binom(u,k).
 ```
 
-**Theorem 8 (tight budgeted size).**
+**Theorem 10 (tight budgeted size).**
 
 ```
 |F_b(A)| <= min(M, D * N_b(u)),
 ```
 
-and equality is attainable for every admissible `D,u,b,M` with `M <= D*N_b(u)`.
+and equality is attainable for every `u,b >= 0` and every legal `(M,D)`: either `M=D=0`, or `1 <= D <= M`.
 
 **Proof of the upper bound.** If `x` wins at any feasible `(q,R)`, moving time to `d_x-1` keeps `x` live and can only expire competitors. Hence every possible winner has a canonical witness `(d_x,R)` with `|R| <= b`. A fixed canonical context has only one highest-ranked live candidate. Possible winners therefore inject into the `D*N_b(u)` canonical contexts. QED.
 
-**Matching construction.** For every distinct deadline `d` and every `R subseteq U` with `|R| <= b`, create candidate `x_(d,R)` with support `U \ R` and rank `(-d, |U\R|, identifier)`. At context `(d-1,R)`, this candidate is live. Any other live construction candidate must have deadline at least `d` and a revocation label containing `R`; a strict relation lowers one of the first two rank components. Thus `x_(d,R)` uniquely wins. The artifact's `tight_budget_grid` realizes the construction, and any subset realizes the cap at its own `M`.
+**Matching construction.** The empty case is immediate. Otherwise let `L=min(M,D*N_b(u))`. Select `L` distinct canonical pairs `(d,R)` with `|R| <= b` while covering all `D` deadlines. Give the associated candidate support `U \ R` and rank `(-d, |U\R|, identifier)`. At context `(d-1,R)`, it is live; any other live selected candidate has deadline at least `d` and a revocation label containing `R`, and a strict relation lowers one of the first two rank components. Thus every selected candidate uniquely wins. If `M>L`, lower-ranked copies of one selected summary fill the candidate count without adding a winner or deadline. `tight_budget_grid` realizes the full grid and `tight_budget_instance` realizes every legal capped case.
 
-Special cases are exact: `D` winners at `b=0`; `D(u+1)` at `b=1`; and `D*2^u` once `b>=u`, recovering Theorem 5. These are capacity laws after policy is fixed, not empirical prevalence estimates. Coalescing deadlines, coarsening token authority, or limiting the budget can reduce retained state only by changing the continuation semantics the system promises to answer.
+Special cases are exact: `D` winners at `b=0`; `D(u+1)` at `b=1`; and `D*2^u` once `b>=u`, recovering Theorem 6. These are capacity laws after policy is fixed, not empirical prevalence estimates. Coalescing deadlines, coarsening token authority, or limiting the budget can reduce retained state only by changing the continuation semantics the system promises to answer.
 
 ## 9. Complexity and residual budgets
 
-**Theorem 9 (variable-universe NP-completeness).** Deciding whether a designated candidate can win under a variable revocation budget is NP-complete even with one entity, one attribute, equal deadlines, and no aliases.
+**Theorem 11 (variable-universe NP-completeness).** Deciding whether a designated candidate can win under a variable revocation budget is NP-complete even with one entity, one attribute, equal deadlines, and no aliases.
 
 **Proof.** Membership follows by checking a proposed hitting set. For hardness, reduce Hitting Set. Given universe `V` and sets `E_1,...,E_m`, add a fresh token `z`. Create a lowest-ranked candidate `x` with support `{z}` and a higher-ranked candidate `y_i` with support `{z} union E_i`; give every candidate the same deadline. A winning context for `x` cannot revoke `z` and must choose within the budget at least one token from every `E_i`. Such a context exists exactly when the Hitting Set instance is feasible. Empty-set infeasibility is preserved, and the construction is polynomial. QED.
 
@@ -181,13 +181,13 @@ If a cache was certified with total budget `b` and cumulative revoked set `R0` o
 
 ## 10. Certificate soundness and completeness
 
-A certificate names the cut, query lower bound, anchor, attribute, clock parameters, every retained summary, one coverage witness for every omitted initially eligible candidate, and one reason for every initially inactive candidate. These classes form a complete disjoint partition of the relevant candidates.
+A certificate repeats the cut, query lower bound, anchor, and attribute, but the trusted caller supplies the expected anchor and attribute independently. It also names every retained summary, one coverage witness for every omitted initially eligible candidate, and one reason for every initially inactive candidate. The checker rejects a repeated target that differs from the caller's expected target; the remaining classes form a complete disjoint partition for that target.
 
-The checker reconstructs the cut rather than trusting supplied summaries. It validates schema closure, unknown fields, immutable replay, source permissions, derivation values, parent acyclicity, timestamps, token names, and the full forest condition. It reconstructs ancestry and the unique alias route; checks every retained identifier, rank, deadline, support, path, and value; checks retained mutual nondominance; verifies each omitted eligible candidate against a strict retained dominator; verifies inactive reasons; and rejects missing, duplicate, unknown, or extra classifications. Query guards bind the verified cache to its cut, permitted time domain, and token universe.
+The checker reconstructs the cut rather than trusting supplied summaries. It validates schema closure, unknown fields, immutable replay, source permissions, derivation values, parent acyclicity, timestamps, token names, and the full forest condition. It reconstructs ancestry and the unique alias route; checks every retained identifier, rank, deadline, support, path, and value; checks retained mutual nondominance; verifies each omitted eligible candidate against a strict retained dominator; verifies inactive reasons; and rejects missing, duplicate, unknown, or extra classifications. Query guards bind the verified cache to its cut, caller-selected entity and attribute, permitted time domain, and token universe.
 
-**Theorem 10 (certificate contract).** Assuming the independently supplied prefix and policy are complete and valid, acceptance implies that the cache answer equals direct replay for every allowed unrestricted continuation. Conversely, the producer can construct an accepted certificate from the compiled frontier and the complete candidate partition.
+**Theorem 12 (certificate contract).** Assuming the independently supplied prefix, policy, and expected target are complete and valid, acceptance implies that the frozen cache is bound to that target and its answer equals direct replay for every allowed unrestricted continuation. Conversely, the producer can construct an accepted certificate for any well-formed caller-selected target from the compiled frontier and the complete candidate partition.
 
-**Proof.** Input validation and Lemmas 1-2 make reconstructed candidate summaries exact. Coverage checks establish that every omitted eligible candidate is dominated by a retained candidate; Theorem 3 preserves all future winners. Inactive candidates cannot become live under fixed-cut time advance and monotone revocation. Exact value/identity binding and query guards prevent substitution or stale-cut use. For completeness, compile the exact summaries, retain the frontier, give one valid dominator for every omitted eligible candidate, and classify every initially inactive candidate by its reconstructed reason; each checker condition then holds. QED.
+**Proof.** Input validation and Lemmas 2-3 make reconstructed candidate summaries exact. The expected-target check prevents same-cut entity or attribute substitution. Coverage then establishes that every omitted eligible candidate is dominated by a retained candidate; Theorem 4 preserves all future winners. Inactive candidates cannot become live under fixed-cut time advance and monotone revocation. Exact target/value/identity binding and query guards prevent redirection or stale-cut use. For completeness, compile the exact summaries, retain the frontier, give one valid dominator for every omitted eligible candidate, and classify every initially inactive candidate by its reconstructed reason; each checker condition then holds. QED.
 
 The bootstrap is linear in the relevant admitted cut because the checker needs the complete independent prefix and a classification of every candidate. A small warm cache is not a succinct proof of unseen-ingress completeness. Authenticating only the retained entries would not prove that no necessary fallback was omitted.
 
@@ -195,6 +195,6 @@ The bootstrap is linear in the relevant admitted cut because the checker needs t
 
 The producer and checker are separate modules; `freshcert/checker.py` imports neither the producer engine nor the frontier helper. The checker includes direct Boolean replay rather than calling the producer's dominance routine. This separation catches many implementation disagreements but is not independent authorship or formal verification.
 
-The frozen campaign contains 768 abstract models and 229 generated event-stream cases, with 82,644 counted logical checks. A separate deterministic suite contains 29 interface and extremal tests. The extremal tests cover duplicate-summary elimination, the full `D*2^u` grid, 128 expiry-only indispensable candidates, logarithmic support codes, the exact budgeted construction over a small parameter grid, direct enumeration of every construction witness, a structured budget-one chain, and invalid parameters. General theorem maturity is therefore **proved at the specification level and finite-checked in code**, not machine-checked.
+The frozen campaign contains 768 abstract models and 229 generated event-stream cases, with 82,644 counted logical checks. A separate deterministic suite contains 31 interface and extremal tests. The extremal tests cover duplicate-summary elimination, the full `D*2^u` grid, 128 expiry-only indispensable candidates, logarithmic support codes, the exact budgeted construction over a small parameter grid, direct enumeration of every construction witness, a structured budget-one chain, and invalid parameters. General theorem maturity is therefore **proved at the specification level and finite-checked in code**, not machine-checked.
 
 All inputs are generated bounded abstractions. No live scan, exposed service, vulnerability label, private data, external solver, GPU, remote model, or production deployment is used. Timing results are descriptive of one local execution and are not part of the universal mathematical claims.

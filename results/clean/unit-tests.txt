@@ -5,12 +5,14 @@ test_checker_has_no_producer_dependency (test_contract.Contract.test_checker_has
 test_current_cut_is_checked (test_contract.Contract.test_current_cut_is_checked) ... ok
 test_current_cut_is_required (test_contract.Contract.test_current_cut_is_required) ... ok
 test_empty_abstract_cache (test_contract.Contract.test_empty_abstract_cache) ... ok
+test_expected_target_inputs_are_required (test_contract.Contract.test_expected_target_inputs_are_required) ... ok
 test_half_open_deadline (test_contract.Contract.test_half_open_deadline) ... ok
 test_id_and_value_are_bound_to_prefix (test_contract.Contract.test_id_and_value_are_bound_to_prefix) ... ok
 test_intake_certificate_is_exact_retained_control (test_contract.Contract.test_intake_certificate_is_exact_retained_control) ... ok
 test_mutating_caller_prefix_cannot_mutate_verified_cache (test_contract.Contract.test_mutating_caller_prefix_cannot_mutate_verified_cache) ... ok
 test_query_support_order_is_irrelevant (test_contract.Contract.test_query_support_order_is_irrelevant) ... ok
 test_query_time_does_not_wrap (test_contract.Contract.test_query_time_does_not_wrap) ... ok
+test_same_cut_target_substitutions_are_rejected (test_contract.Contract.test_same_cut_target_substitutions_are_rejected) ... ok
 test_string_is_not_a_revocation_collection (test_contract.Contract.test_string_is_not_a_revocation_collection) ... ok
 test_unknown_future_scope_is_rejected (test_contract.Contract.test_unknown_future_scope_is_rejected) ... ok
 test_verified_cache_is_immutable (test_contract.Contract.test_verified_cache_is_immutable) ... ok
@@ -29,6 +31,6 @@ test_logarithmic_support_code_can_prevent_compression (test_extremal.SummaryDive
 test_tight_grid_realizes_every_summary (test_extremal.SummaryDiversityTests.test_tight_grid_realizes_every_summary) ... ok
 
 ----------------------------------------------------------------------
-Ran 29 tests in 0.019s
+Ran 31 tests in 0.041s
 
 OK

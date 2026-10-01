@@ -17,7 +17,7 @@ Both are upper bounds with matching constructions for every admissible parameter
 
 The result is conditional on all of the following.
 
-- The checker receives a complete admitted event prefix and immutable policy independently of the producer.
+- The checker receives a complete admitted event prefix, immutable policy, and expected entity/attribute target independently of the producer and certificate.
 - The current cut identifier and all later revocations are independently known.
 - Evidence identifiers and candidate ranks are immutable and unique.
 - Observation intervals and lifetimes are bounded integers, with no arithmetic wraparound.

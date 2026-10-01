@@ -30,7 +30,7 @@ Complete arguments and boundaries are in `docs/semantics-and-proofs.md` and `doc
 
 ## Trust boundary
 
-The checker must receive the complete admitted prefix, policy, current cut identifier, and subsequent revocations through an independently trusted route. Giving it only a producer-selected history would make a self-authenticated certificate. The artifact does not authenticate signatures, public keys, physical clocks, source truth, real Internet identity, or unseen ingress. New observations, policy changes, token refinement, revocation reinstatement, or a new cut require rebootstrap.
+The checker must receive the complete admitted prefix, policy, current cut identifier, expected entity, expected attribute, and subsequent revocations through an independently trusted route. The certificate repeats the target but cannot select it: `check`/`verify` require the caller's expected target, compare it before reconstruction, and store it in the frozen `Verified` cache. Giving the checker only producer-selected history or a producer-selected target would make a self-authenticated or redirectable certificate. The artifact does not authenticate signatures, public keys, physical clocks, source truth, real Internet identity, or unseen ingress. New observations, policy changes, token refinement, revocation reinstatement, or a new cut require rebootstrap.
 
 The admitted derivation language is AND-only copy and finite-set union; aliases form a forest. The answer includes evidence identity. Multiple alternative alias routes, value-only equivalence, cyclic graphs, correlated revocation constraints, and richer derivation languages can change the representation and minimum-retention problem.
 
@@ -44,7 +44,7 @@ python reproduce.py --all --out results/reproduced --compare results/reference
 python report.py --results results/reference --out results/paper-data
 ```
 
-The deterministic regression suite has **29 tests**: 16 interface/contract tests and 13 extremal tests. The frozen campaign invokes one sequential child at a time and has **82,644 logical checks across 997 case entries**: 768 abstract models and 229 generated event-stream cases, not 997 Internet workloads. The largest generated case has 2,000 provenance records.
+The deterministic regression suite has **31 tests**: 18 interface/contract tests and 13 extremal tests. The frozen campaign invokes one sequential child at a time and has **82,644 logical checks across 997 case entries**: 768 abstract models and 229 generated event-stream cases, not 997 Internet workloads. The largest generated case has 2,000 provenance records.
 
 Each scientific phase has a 100-second CPU limit, 120-second wall limit, and 2,500,000,000-byte address-space limit. A complete run refuses more than 85,000 counted obligations. `--compare` requires exact equality of 23 discrete result files and all non-timing fields of 18 case tables; timing values are deliberately not compared bit-for-bit. A mismatch raises an exception and returns nonzero.
 
@@ -69,11 +69,12 @@ from freshcert.engine import Compiled
 
 raw = json.loads(Path("inputs/intake.json").read_text())
 certificate = Compiled(raw).certificate("e0", "tag")
-cache = verify(raw, certificate)  # raw must come from an independent route
+cache = verify(raw, certificate,  # raw and target must be independently selected
+               expected_entity="e0", expected_attribute="tag")
 print(cache.record(raw["q0"], (), current_cut=raw["cut"]))
 ```
 
-The producer import demonstrates the local toy pipeline; a deployed verifier would not obtain its trusted prefix from that producer. `current_cut` is mandatory. `AuditError` reports malformed input, certificate mismatch, or a query-guard violation. `InvalidStream` is the producer-side validation exception.
+The producer import demonstrates the local toy pipeline; a deployed verifier would not obtain its trusted prefix or expected target from that producer. Both expected-target keywords are mandatory at bootstrap, and the frozen cache exposes `cache.entity` and `cache.attribute`. `current_cut` is mandatory at query time. `AuditError` reports malformed input, target/certificate mismatch, or a query-guard violation. `InvalidStream` is the producer-side validation exception.
 
 ## Repository map
 
@@ -89,7 +90,7 @@ The producer import demonstrates the local toy pipeline; a deployed verifier wou
 - `results/paper-data/`: CSV and TeX derived from raw reference outcomes.
 - `claim_evidence_ledger.csv`: each material claim mapped to proof, code, test, raw result, maturity, and boundary.
 - `external_resources.csv`: scholarly, policy, template, and software sources with acquisition and integration notes.
-- `docs/`: input, measurement, resource, mathematical, and research-boundary contracts.
+- `docs/`: input, measurement, run-environment, resource, mathematical, and research-boundary contracts.
 
 The repository is standalone. It does not require the paper directory, a private path, an omitted cache, a remote controller, or a third-party implementation.
 
@@ -97,7 +98,7 @@ The repository is standalone. It does not require the paper directory, a private
 
 The producer/checker cache agrees with direct replay in all 4,608 frozen query contexts. The timestamp-only baseline returns an ineligible record in 1,751 contexts. Retaining only the current top candidate causes 1,534 identity/completeness errors while not returning an ineligible record. Eighteen invalid streams are rejected independently by producer and checker; six valid controls are accepted; twenty effective certificate mutations and four invalid cache queries are rejected.
 
-The scaling cases include shared scopes, independent private scopes, and conjunctive chains at 256, 512, 1,024, and 2,000 records. They isolate semantic regimes rather than estimate Internet workload prevalence. Shared scopes retain one candidate; private scopes retain all candidates; chains retain four. The matched full-cache baseline uses the same set representation and query routine as the frontier cache. Raw timings are descriptive single-environment measurements, not production throughput or confidence intervals.
+The scaling cases include shared scopes, independent private scopes, and conjunctive chains at 256, 512, 1,024, and 2,000 records. They isolate semantic regimes rather than estimate Internet workload prevalence. Shared scopes retain one candidate; private scopes retain all candidates; chains retain four. The matched full-cache baseline uses the same set representation and query routine as the frontier cache. Build/check/full-setup values are single observations per case; only warm-query values are medians of five batch means. The reference run did not retain exact Python, CPU/architecture, OS/image, or actual affinity identifiers, so its absolute timings are descriptive and cannot be exactly recreated from the package. `docs/run-environments.md` distinguishes those unrecorded fields from the fully recorded post-repair clean execution.
 
 ## Rights and status
 
